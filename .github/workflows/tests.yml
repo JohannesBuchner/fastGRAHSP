@@ -6,8 +6,6 @@ name: build
 on:
   push:
   pull_request:
-  schedule:
-    - cron: '42 4 5,20 * *'
 
 jobs:
   build:
@@ -32,16 +30,13 @@ jobs:
       run: python -m pip install .
 
     - name: Lint with flake8
-      run: flake8 askcarl/*.py
+      run: flake8 fastGRAHSP/*.py
 
     - name: Check code style
-      run: pycodestyle askcarl/*.py
+      run: pycodestyle fastGRAHSP/*.py
 
     - name: Check doc style
-      run: pydocstyle askcarl/*.py
-
-    - name: Test package
-      run: PYTHONPATH=. python3 -m coverage run examples/iris.py
+      run: pydocstyle fastGRAHSP/*.py
 
     - name: Test with pytest
       run: PYTHONPATH=. python3 -m coverage run -a -m pytest
