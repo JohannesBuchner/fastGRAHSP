@@ -1,16 +1,15 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""
-fastGRAHSP: fast neural network simulator for fluxes of galaxies and quasars.
-"""
+"""fastGRAHSP: fast neural network simulator for fluxes of galaxies and quasars."""
 
-__version__ = '2.0.1'
-__author__ = 'Johannes Buchner'
+__version__ = "0.1.0"
+__author__ = "Johannes Buchner"
 
+import json
 import os
+
 import numpy as np
 import onnxruntime as rt
-import json
 
 
 class Emulator:
@@ -44,9 +43,12 @@ class Emulator:
         y: array
             prediction of the model.
         """
-        output = self.session.run(self.output_names, {self.input_name: X.astype(np.float32)})
+        output = self.session.run(
+            self.output_names,
+            {self.input_name: X.astype(np.float32)}
+        )
         return {outputname: output[i] for i, outputname in enumerate(self.output_names)}
-            
+
 
 emulators = {}
 
@@ -55,7 +57,7 @@ def predict_fluxes(Xextended, width=128, providers=["CPUExecutionProvider"], **k
     """Predict flux.
 
     Parameters
-    -----------
+    ----------
     Xextended: array
         Model parameter array (see example below):
 
@@ -86,11 +88,11 @@ def predict_fluxes(Xextended, width=128, providers=["CPUExecutionProvider"], **k
         Larger size is slower but more accurate
     providers: list
         passed to `onnxruntime.InferenceSession`
-    kwargs: dict
+    **kwargs: dict
         additional arguments passed to `onnxruntime.InferenceSession`
 
     Returns
-    ----------
+    -------
     flux: array
         flux in mJy.
     fluxGAL: array
@@ -163,21 +165,33 @@ def predict_fluxes(Xextended, width=128, providers=["CPUExecutionProvider"], **k
         total_fluxes, total_columns, GAL_fluxes, GAL_columns, AGN_fluxes, AGN_columns = results
         i = total_columns.index('WISE1')
         print(total_fluxes[:, i])  # WISE1 flux in mJy
-    
-    """
-    if 'GALAGN' not in emulators:
-        print("loading emulators...")
-        filename = os.path.join(os.path.dirname(__file__), f'GALAGN{width}')
-        
-        info = json.load(open(filename + '.json'))
-        print("emulator expects as input:", info['input'])
-        assert Xextended.shape[1] == len(info['input']), (Xextended.shape, len(info['input']))
-        for key, colnames in info['output']:
-            emulators[key + 'colnames'] = colnames
-        emulators['GALAGN'] = Emulator(filename + '.onnx', providers=providers, **kwargs)
 
-    outGALAGN = emulators['GALAGN'].predict(Xextended)
-    outGAL = outGALAGN['GAL_outputs_linear_scaled']
-    outAGN = outGALAGN['AGN_outputs_linear_scaled']
-    out = outGALAGN['both_val']
-    return out, emulators['TOTALcolnames'], outGAL, emulators['GALcolnames'], outAGN, emulators['AGNcolnames']
+    """
+    if "GALAGN" not in emulators:
+        print("loading emulators...")
+        filename = os.path.join(os.path.dirname(__file__), f"GALAGN{width}")
+
+        info = json.load(open(filename + ".json"))
+        print("emulator expects as input:", info["input"])
+        assert Xextended.shape[1] == len(info["input"]), (
+            Xextended.shape,
+            len(info["input"]),
+        )
+        for key, colnames in info["output"]:
+            emulators[key + "colnames"] = colnames
+        emulators["GALAGN"] = Emulator(
+            filename + ".onnx", providers=providers, **kwargs
+        )
+
+    outGALAGN = emulators["GALAGN"].predict(Xextended)
+    outGAL = outGALAGN["GAL_outputs_linear_scaled"]
+    outAGN = outGALAGN["AGN_outputs_linear_scaled"]
+    out = outGALAGN["both_val"]
+    return (
+        out,
+        emulators["TOTALcolnames"],
+        outGAL,
+        emulators["GALcolnames"],
+        outAGN,
+        emulators["AGNcolnames"],
+    )
