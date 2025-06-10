@@ -6,6 +6,10 @@ include LICENSE
 include README.rst
 include pip-requirements.txt
 
+recursive-include fastGRAHSP *
+recursive-include fastGRAHSP *.onnx
+recursive-include fastGRAHSP *.json
+
 recursive-include tests *
 recursive-exclude * __pycache__
 recursive-exclude * *.py[co]

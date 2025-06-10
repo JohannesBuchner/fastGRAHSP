@@ -45,6 +45,8 @@ setup(
         "Programming Language :: Python :: 3.12",
     ],
     description="Fast neural network simulator for fluxes of galaxies and quasars.",
+    package_data={'fastGRAHSP': ['fastGRAHSP/*.onnx', 'fastGRAHSP/*.json']},
+    include_package_data=True,
     install_requires=requirements,
     license="GNU General Public License v3",
     long_description=readme + '\n\n' + history,
