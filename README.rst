@@ -29,32 +29,31 @@ Usage
 
 You need to prepare a model parameter array (see example below):
 
-    * log10 tau: time-scale of starformation in Myr
-    * log10 age: age of oldest stars in Myr
-    * log10 AFeII: amplitude of lines
-    * log10 Alines: amplitude of lines
-    * linewidth: width of broad emission lines
-    * Si: strength of 12µm silicate feature (positive: emission, negative: absorption)
-    * fcov: covering factor, based on the ratio of 12µm to 5100A luminosity ratio
-    * COOLlam: central wavelength in µm of cold torus component
-    * COOLwidth: width (in dex) of cold torus component
-    * log10 HOTfcov: peak luminosity ratio of hot to cold torus component
-    * HOTlam: central wavelength in µm of hot torus component
-    * HOTwidth: width (in dex) of hot torus component
-    * plslope: AGN power law slope
-    * plbendloc: wavelength of UV bend.
-    * log10 plbendwidth: width of UV bend (in dex).
-    * log10 EBV: E(B-V) attenuation coefficient of entire system.
-    * log10 EBV_AGN: E(B-V) attenuation coefficient of nucleus.
-    * alpha: dust slope of Dale+ model
-    * z: redshift
-    * M: log10 of galaxy stellar mass in solar masses
-    * L5100A: log10 of AGN luminosity at 5100A in erg/s.
+* log10 tau: time-scale of starformation in Myr
+* log10 age: age of oldest stars in Myr
+* log10 AFeII: amplitude of lines
+* log10 Alines: amplitude of lines
+* linewidth: width of broad emission lines
+* Si: strength of 12µm silicate feature (positive: emission, negative: absorption)
+* fcov: covering factor, based on the ratio of 12µm to 5100A luminosity ratio
+* COOLlam: central wavelength in µm of cold torus component
+* COOLwidth: width (in dex) of cold torus component
+* log10 HOTfcov: peak luminosity ratio of hot to cold torus component
+* HOTlam: central wavelength in µm of hot torus component
+* HOTwidth: width (in dex) of hot torus component
+* plslope: AGN power law slope
+* plbendloc: wavelength of UV bend.
+* log10 plbendwidth: width of UV bend (in dex).
+* log10 EBV: E(B-V) attenuation coefficient of entire system.
+* log10 EBV_AGN: E(B-V) attenuation coefficient of nucleus.
+* alpha: dust slope of Dale+ model
+* z: redshift
+* M: log10 of galaxy stellar mass in solar masses
+* L5100A: log10 of AGN luminosity at 5100A in erg/s.
 
+For example, you can simulate the fluxes of 10000 galaxies like so::
 
-::
-
-    N = 1000
+    N = 10000
     df = dict(
         tau=np.random.uniform(1, 10000, size=N),
         age=np.random.uniform(1, 10000, size=N),
