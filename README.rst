@@ -17,7 +17,7 @@ fastGRAHSP can be used for simulating surveys extremely rapidly.
         :target: https://github.com/JohannesBuchner/fastGRAHSP/actions/workflows/tests.yml
 
 .. image:: https://img.shields.io/badge/docs-published-ok.svg
-        :target: https://johannesbuchner.github.io/fastGRAHSP/
+        :target: https://github.com/JohannesBuchner/fastGRAHSP/
         :alt: Documentation Status
 
 .. image:: https://coveralls.io/repos/github/JohannesBuchner/fastGRAHSP/badge.svg?branch=main
