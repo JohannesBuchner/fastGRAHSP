@@ -121,6 +121,7 @@ There is also a module to convert given:
 
 Here is an example::
 
+        from fastGRAHSP.xray import XFluxModel
         model = XFluxModel('hard', lumdistfunc)
         nH = np.linspace(20.01, 25.9, 100)
         Gamma = 2 + np.zeros(100)
