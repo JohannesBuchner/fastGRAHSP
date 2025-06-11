@@ -2,7 +2,7 @@
 # coding: utf-8
 """fastGRAHSP: fast neural network simulator for fluxes of galaxies and quasars."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__ = "Johannes Buchner"
 
 import json
