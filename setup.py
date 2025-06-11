@@ -56,5 +56,5 @@ setup(
     tests_require=test_requirements,
     extras_require=dict(plot=['matplotlib', 'scipy']),
     url='https://github.com/JohannesBuchner/fastGRAHSP',
-    version='0.1.0',
+    version='1.0.0',
 )
