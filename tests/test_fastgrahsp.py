@@ -54,10 +54,12 @@ def test_mock():
         df['z'],
         df['EBV'] + df['EBV_AGN'],
     ])
-    results = predict_fluxes(emulator_args)
-    total_fluxes, total_columns, GAL_fluxes, GAL_columns, AGN_fluxes, AGN_columns = results
-    i = total_columns.index('WISE1')
-    print(total_fluxes[:, i])  # WISE1 flux in mJy
-    assert total_fluxes.shape == (N, len(total_columns))
-    assert GAL_fluxes.shape == (N, len(GAL_columns))
-    assert AGN_fluxes.shape == (N, len(AGN_columns))
+    for width in 128, 256, 512:
+        print("NN width:", width)
+        results = predict_fluxes(emulator_args, width=width)
+        total_fluxes, total_columns, GAL_fluxes, GAL_columns, AGN_fluxes, AGN_columns = results
+        i = total_columns.index('WISE1')
+        print(total_fluxes[:, i])  # WISE1 flux in mJy
+        assert total_fluxes.shape == (N, len(total_columns))
+        assert GAL_fluxes.shape == (N, len(GAL_columns))
+        assert AGN_fluxes.shape == (N, len(AGN_columns))

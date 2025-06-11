@@ -109,6 +109,59 @@ For example, you can simulate the fluxes of 10000 galaxies like so::
     i = total_columns.index('WISE1')
     print(total_fluxes[:, i])  # WISE1 flux in mJy
 
+X-ray flux
+----------
+
+There is also a module to convert given:
+
+* Intrinsic AGN luminosity in the 2-10keV rest-frame energy range
+* Column density N_H in cm^2
+* Photon Index
+* Redshift
+
+Here is an example::
+
+        model = XFluxModel('hard', lumdistfunc)
+        nH = np.linspace(20.01, 25.9, 100)
+        Gamma = 2 + np.zeros(100)
+        z = 2.0 + np.zeros(100)
+        L = 45 + np.zeros(100)
+        logflux = model.photon_log10flux_for(L, Gamma, nH, z)
+
+The observed X-ray bands available are:
+
+* 'soft': Chandra 0.5-2keV
+* 'full': Chandra 0.5-7keV -- actually 
+* 'hard': Chandra 2-7keV -- can be compared to results from a ECF of 2.625E-11 corresponding to a PhoIndex=1.4
+* 'ehard': eROSITA 2.3-5keV -- can be compared to results from a ECF of (1 / 1.102e+11 * 1.56 * 1.8) corresponding to a PhoIndex=2
+* 'emain': eROSITA 0.6-2.3keV  -- can be compared to results from a ECF of (1 / 1.054e+12 * 0.29 * 1.8) corresponding to a PhoIndex=2
+* 'uhrd': NuSTAR 3-24keV
+* 'bat': BAT 14-195keV
+
+Where indicated above, the fluxes are actually converted to net source counts,
+and then converted back to fluxes with a ECF. This gives a more realistic comparison 
+to real data.
+Responses used are from COSMOS (NuSTAR), 
+CDF-S 4Ms (Chandra, see BXA example source 179) and eFEDS (eROSITA).
+
+In the example above, lumdistfunc is, if using astropy.cosmology::
+
+    from astropy.cosmology import FlatLambdaCDM
+    import astropy.units as u
+    cosmo2 = FlatLambdaCDM(H0=70, Om0=0.3)
+    def lumdistfunc2(z):
+        return cosmo2.luminosity_distance(z).to(u.cm)
+
+If using cosmolopy, it is::
+
+    import cosmolopy
+    cosmo = {'omega_M_0' : 0.3, 'omega_lambda_0' : 0.7, 'h' : 0.7}
+    cosmo = cosmolopy.distance.set_omega_k_0(cosmo)
+    dist = cosmolopy.distance.quick_distance_function(cosmolopy.distance.luminosity_distance, zmax=8, **cosmo)
+    def lumdistfunc1(z):
+        return dist(z) * cosmolopy.constants.Mpc_cm
+    
+
 
 Licence
 ^^^^^^^
