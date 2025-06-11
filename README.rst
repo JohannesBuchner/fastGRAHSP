@@ -25,7 +25,7 @@ fastGRAHSP can be used for simulating surveys extremely rapidly.
         :alt: Coverage
 
 Usage
-^^^^^
+-----
 
 You need to prepare a model parameter array (see example below):
 
@@ -165,7 +165,7 @@ If using cosmolopy, it is::
 
 
 Licence
-^^^^^^^
+-------
 
 GPLv3 (see LICENCE file). If you require another license, please contact me.
 

@@ -50,6 +50,7 @@ setup(
     install_requires=requirements,
     license="GNU General Public License v3",
     long_description=readme + '\n\n' + history,
+    long_description_content_type='text/x-rst',
     packages=['fastGRAHSP'],
     setup_requires=setup_requirements,
     test_suite='tests',
