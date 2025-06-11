@@ -62,7 +62,7 @@ class XFluxModel:
                 * Ecut: 400, 300
                 * fracscat: 0, 0.1, 0.01 (relative normalisation of second, unobscured powerlaw)
 
-            The default and recommended geometry is '8-0.1-avg-300-0'.
+            The default and recommended geometry is '28-0.4-avg-400-0'.
 
         Returns
         ----------
