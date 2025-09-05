@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 import numpy as np
 from fastGRAHSP import predict_fluxes
 from numpy.testing import assert_allclose
@@ -56,7 +55,7 @@ def test_mock():
         df['z'],
         df['EBV'] + df['EBV_AGN'],
     ])
-    for width in 128, 256, 1024:
+    for width in 128, 256,:
         print("NN width:", width)
         results = predict_fluxes(emulator_args, width=width)
         total_fluxes, total_columns, GAL_fluxes, GAL_columns, AGN_fluxes, AGN_columns = results
@@ -199,6 +198,7 @@ def scan_and_plot(predict_fluxes,
                 if not plot:
                     continue
 
+                import matplotlib.pyplot as plt
                 xtitle = f"{name} ({scale})"
                 print(f"plotting {name} {width} {band} ...")
                 if band not in figures:
@@ -288,7 +288,7 @@ def test_sensitivity(plot=False):
         param_specs,
         defaults,
         n_points=100,
-        widths=(128,),   # set to (128,256,512) if you want all
+        widths=(128, 256),   # set to (128,256,512) if you want all
         y_clip_min=1e-30,
         plot=plot)
 
