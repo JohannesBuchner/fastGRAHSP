@@ -167,9 +167,10 @@ def predict_fluxes(Xextended, width=128, providers=["CPUExecutionProvider"], **k
         print(total_fluxes[:, i])  # WISE1 flux in mJy
 
     """
-    if "GALAGN" not in emulators:
+    key = f"GALAGN{width}"
+    if key not in emulators:
         print("loading emulators...")
-        filename = os.path.join(os.path.dirname(__file__), f"GALAGN{width}")
+        filename = os.path.join(os.path.dirname(__file__), key)
 
         info = json.load(open(filename + ".json"))
         print("emulator expects as input:", info["input"])
@@ -177,21 +178,24 @@ def predict_fluxes(Xextended, width=128, providers=["CPUExecutionProvider"], **k
             Xextended.shape,
             len(info["input"]),
         )
-        for key, colnames in info["output"]:
-            emulators[key + "colnames"] = colnames
-        emulators["GALAGN"] = Emulator(
+        for subkey, colnames in info["output"]:
+            emulators[key + subkey + "colnames"] = colnames
+        emulators[key] = Emulator(
             filename + ".onnx", providers=providers, **kwargs
         )
 
-    outGALAGN = emulators["GALAGN"].predict(Xextended)
+    outGALAGN = emulators[key].predict(Xextended)
     outGAL = outGALAGN["GAL_outputs_linear_scaled"]
     outAGN = outGALAGN["AGN_outputs_linear_scaled"]
     out = outGALAGN["both_val"]
+    assert np.all(outGAL >= 0)
+    assert np.all(outAGN >= 0)
+    assert np.all(out >= 0)
     return (
         out,
-        emulators["TOTALcolnames"],
+        emulators[key + "TOTALcolnames"],
         outGAL,
-        emulators["GALcolnames"],
+        emulators[key + "GALcolnames"],
         outAGN,
-        emulators["AGNcolnames"],
+        emulators[key + "AGNcolnames"],
     )

@@ -207,37 +207,38 @@ def main():
     def lumdistfunc2(z):
         return cosmo2.luminosity_distance(z).to(u.cm)
     
-    for lumdistfunc in lumdistfunc1, lumdistfunc2:
-        model = XFluxModel('hard', lumdistfunc)
-        import matplotlib.pyplot as plt
-        N = 100
-        for zi in 0.1, 1, 2, 3:
+    for band in 'hard', 'soft':
+        for lumdistfunc in lumdistfunc1, lumdistfunc2:
+            model = XFluxModel(band, lumdistfunc)
+            import matplotlib.pyplot as plt
+            N = 100
+            for zi in 0.1, 1, 2, 3:
+                Gamma = 2 + np.zeros(N)
+                nH = np.linspace(20.01, 25.9, N)
+                z = zi + np.zeros(N)
+                L = 45 + np.zeros(N)
+                plt.plot(nH, model.photon_log10flux_for(L, Gamma, nH, z), label=zi)
+            plt.legend(title='Redshift')
+            plt.xlabel(r'Hydrogen-equivalent Column density $N_\mathrm{H}$ [cm$^{-2}$], log')
+            plt.ylabel('Observed X-ray Flux (Chandra 2-7keV band)')
+            plt.savefig(f'Xflux_nH_{band}.pdf')
+            plt.close()
+            fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(hspace=0.04))
             Gamma = 2 + np.zeros(N)
-            nH = np.linspace(20.01, 25.9, N)
-            z = zi + np.zeros(N)
+            z = np.linspace(0.1, 6, N)
+            nH = 21 + np.log10((1 + z)**3.3)  # Gilli+22 suggestion
             L = 45 + np.zeros(N)
-            plt.plot(nH, model.photon_log10flux_for(L, Gamma, nH, z), label=zi)
-        plt.legend(title='Redshift')
-        plt.xlabel(r'Hydrogen-equivalent Column density $N_\mathrm{H}$ [cm$^{-2}$], log')
-        plt.ylabel('Observed X-ray Flux (Chandra 2-7keV band)')
-        plt.savefig('Xflux_nH.pdf')
-        plt.close()
-        fig, (ax1, ax2) = plt.subplots(2, 1, sharex=True, gridspec_kw=dict(hspace=0.04))
-        Gamma = 2 + np.zeros(N)
-        z = np.linspace(0.1, 6, N)
-        nH = 21 + np.log10((1 + z)**3.3)  # Gilli+22 suggestion
-        L = 45 + np.zeros(N)
-        ax1.plot(z, nH, label='Gilli+22')
-        ax1.set_ylabel(r'$\log N_\mathrm{H}$ [cm$^{-2}$]')
-        ax1.legend()
-        ax2.plot(z, model.photon_log10flux_for(L, Gamma, nH, z), label=r'$N_\mathrm{H}$ increases with redshift')
-        nH = 20 + 0 * z
-        ax2.plot(z, model.photon_log10flux_for(L, Gamma, nH, z), color='lightgray', ls='--', label='unobscured for comparison')
-        ax2.set_ylabel('Observed X-ray Flux (2-7keV)')
-        ax2.set_xlabel('Redshift')
-        ax2.legend()
-        plt.savefig('Xflux_z.pdf')
-        plt.close()
+            ax1.plot(z, nH, label='Gilli+22')
+            ax1.set_ylabel(r'$\log N_\mathrm{H}$ [cm$^{-2}$]')
+            ax1.legend()
+            ax2.plot(z, model.photon_log10flux_for(L, Gamma, nH, z), label=r'$N_\mathrm{H}$ increases with redshift')
+            nH = 20 + 0 * z
+            ax2.plot(z, model.photon_log10flux_for(L, Gamma, nH, z), color='lightgray', ls='--', label='unobscured for comparison')
+            ax2.set_ylabel('Observed X-ray Flux (2-7keV)')
+            ax2.set_xlabel('Redshift')
+            ax2.legend()
+            plt.savefig(f'Xflux_z_{band}.pdf')
+            plt.close()
 
         
 if __name__ == '__main__':
