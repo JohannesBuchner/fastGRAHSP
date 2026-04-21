@@ -89,26 +89,28 @@ def extract_fused_galagn_weights(onnx_path: str, json_path: str, verbose: bool =
         params[f"gal_W{i}"] = weights[w_name].astype(np.float32)
         params[f"gal_b{i}"] = weights[b_name].astype(np.float32)
     params["gal_n_layers"] = len(gal_layer_names)
+    for k in weights.keys():
+        print(k)
 
     params["agn_norm_mean"] = weights[
-        "sequential_1_1/normalization_1_1/Sub/y:0"
+        "sequential_2_1/normalization_1_1/Sub/y:0"
     ].astype(np.float32)
     params["agn_norm_inv_std"] = weights[
-        "ConstantFolding/sequential_1_1/normalization_1_1/truediv_recip:0"
+        "ConstantFolding/sequential_2_1/normalization_1_1/truediv_recip:0"
     ].astype(np.float32)
 
     agn_layer_names = [
         (
-            "sequential_1_1/dense_3_1/Cast/ReadVariableOp:0",
-            "sequential_1_1/dense_3_1/BiasAdd/ReadVariableOp:0",
+            "sequential_2_1/dense_6_1/Cast/ReadVariableOp:0",
+            "sequential_2_1/dense_6_1/BiasAdd/ReadVariableOp:0",
         ),
         (
-            "sequential_1_1/dense_4_1/Cast/ReadVariableOp:0",
-            "sequential_1_1/dense_4_1/BiasAdd/ReadVariableOp:0",
+            "sequential_2_1/dense_7_1/Cast/ReadVariableOp:0",
+            "sequential_2_1/dense_7_1/BiasAdd/ReadVariableOp:0",
         ),
         (
-            "sequential_1_1/dense_5_1/Cast/ReadVariableOp:0",
-            "sequential_1_1/dense_5_1/BiasAdd/ReadVariableOp:0",
+            "sequential_2_1/dense_8_1/Cast/ReadVariableOp:0",
+            "sequential_2_1/dense_8_1/BiasAdd/ReadVariableOp:0",
         ),
     ]
     for i, (w_name, b_name) in enumerate(agn_layer_names):
@@ -149,7 +151,7 @@ def jax_normalize_grahsp(x, mean, inv_std):
     return (x - mean) * inv_std
 
 
-def _jax_grahsp_forward(h, params, n_layers):
+def _jax_grahsp_forward(h, params, prefix, n_layers):
     """Forward pass for GAL or AGN sub-network of fastGRAHSP.
 
     Parameters
@@ -158,6 +160,8 @@ def _jax_grahsp_forward(h, params, n_layers):
         input layer values
     params: dict
         model data
+    prefix: str
+        'agn' or 'gal', which sub-network to evaluate.
     n_layers: int
         number of model layers
 
@@ -167,12 +171,12 @@ def _jax_grahsp_forward(h, params, n_layers):
         output layer values
     """
     h = jax_normalize_grahsp(
-        h, params["norm_mean"], params["norm_inv_std"]
+        h, params[f"{prefix}_norm_mean"], params[f"{prefix}_norm_inv_std"]
     )
     for i in range(n_layers):
-        h = h @ params[f"W{i}"] + params[f"b{i}"]
+        h = h @ params[f"{prefix}_W{i}"] + params[f"{prefix}_b{i}"]
         if i < n_layers - 1:
-            h = jax.nn.relu(h)
+            h = jax.nn.tanh(h)
     return h
 
 
