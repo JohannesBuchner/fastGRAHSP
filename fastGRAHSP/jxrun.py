@@ -1,288 +1,285 @@
 #!/usr/bin/env python3
-"""Functions for using the emulator from jax."""
+"""JAX interface for the *new* torch/specsimile-based fastGRAHSP emulator.
 
-import json
-import os
-from typing import Dict
+The emulator now consists of two specsimile ``LogDenseDecoder`` models:
 
-import jax
+* **GAL** – predicts log10(flux / 10^(log_stellar_mass - 10))
+* **AGN** – predicts log10(flux / 10^(logLAGN - 44))
+
+The combined (TOTAL) flux is:
+
+    F_total[i] = F_GAL[i] + F_AGN[i]
+
+where::
+
+    F_GAL  = 10^(GAL_output)  * 10^(log_stellar_mass - 10)
+    F_AGN  = 10^(AGN_output)  * 10^(logLAGN           - 44)
+
+Only the filter columns that appear in *both* outputs are summed to TOTAL.
+
+This module exposes two public functions that match the signatures expected
+by ``difflike.py`` / ``megadifflike.py``:
+
+* :func:`extract_fused_galagn_weights` – load the two .pt files into a flat
+  parameter dict.  All required metadata (input parameter names, output
+  column names) is read directly from the checkpoint files; no separate JSON
+  sidecar is needed.
+* :func:`jax_fastgrahsp_predict` – pure-JAX forward pass.
+"""
+
+from typing import Dict, List, Tuple
+
 import jax.numpy as jnp
 import numpy as np
-import onnx
-import onnx.numpy_helper as np_helper
+import specsimile.jxrun as _specsimile
+import torch
+
+# ---------------------------------------------------------------------------
+# Constants (hardcoded, matching buildemulator.py / prepare_data.py)
+# ---------------------------------------------------------------------------
+_GAL_NORM_OFFSET = 10.0   # log_stellar_mass reference
+_AGN_NORM_OFFSET = 44.0   # logLAGN reference
 
 
-def extract_onnx_weights(onnx_path: str) -> Dict[str, np.ndarray]:
-    """Extract all initializer tensors from an ONNX model.
+# ---------------------------------------------------------------------------
+# Weight extraction
+# ---------------------------------------------------------------------------
+
+def extract_fused_galagn_weights(
+    gal_model_path: str,
+    agn_model_path: str,
+    verbose: bool = True,
+) -> Tuple[Dict, Dict]:
+    """
+    Load the GAL and AGN specsimile emulators.
+
+    All required metadata — input parameter names (``paramnames``) and output
+    column names (``xnames``) — is read directly from the ``.pt`` checkpoint
+    files.  No separate JSON sidecar is needed.
 
     Parameters
     ----------
-    onnx_path: str
-        path to model
+    gal_model_path : str
+        Path to the GAL specsimile ``.pt`` checkpoint.
+    agn_model_path : str
+        Path to the AGN specsimile ``.pt`` checkpoint.
+    verbose : bool
 
     Returns
     -------
-    weights: dict
-        model data
+    params : dict
+        Flat parameter bundle that :func:`jax_fastgrahsp_predict` consumes.
+    info : dict
+        Metadata dict with the same schema that the old JSON sidecar
+        provided, reconstructed from checkpoint metadata::
+
+            {
+                "input": [...],          # full merged input column names
+                "output": [
+                    ["GAL",   [...]],
+                    ["AGN",   [...]],
+                    ["TOTAL", [...]]
+                ]
+            }
+
+    Raises
+    ------
+    ValueError
+        If either checkpoint is missing ``paramnames`` or ``xnames`` in its
+        ``meta`` dict (i.e. it was saved before these fields were recorded).
     """
-    model = onnx.load(onnx_path)
-    weights = {}
-    for init in model.graph.initializer:
-        weights[init.name] = np_helper.to_array(init)
-    return weights
-
-
-def extract_fused_galagn_weights(onnx_path: str, json_path: str, verbose: bool = True):
-    """Extract model weights.
-
-    Parameters
-    ----------
-    onnx_path: str
-        path to model data.
-    json_path: str
-        path to model metadata
-    verbose: bool
-        whether to print out debug information
-
-    Returns
-    -------
-    params: dict
-        model data
-    info: dict
-        model metadata
-    """
-    weights = extract_onnx_weights(onnx_path)
-    info = json.load(open(json_path))
-
-    params = {}
-    params["gal_indices"] = weights["GAL_indices"].astype(np.int32)
-    params["agn_indices"] = weights["AGN_indices"].astype(np.int32)
-    params["gal_norm_index"] = weights["gal_norm_index"].astype(np.int32)
-    params["agn_norm_index"] = weights["agn_norm_index"].astype(np.int32)
-    params["gal_norm_offset"] = 10.0
-    params["agn_norm_offset"] = 44.0
-    params["gal_output_indices"] = weights["GAL_outputs_indices"].astype(np.int32)
-    params["agn_output_indices"] = weights["AGN_outputs_indices"].astype(np.int32)
-
-    params["gal_norm_mean"] = weights["sequential_1/normalization_1/Sub/y:0"].astype(
-        np.float32
-    )
-    params["gal_norm_inv_std"] = weights[
-        "ConstantFolding/sequential_1/normalization_1/truediv_recip:0"
-    ].astype(np.float32)
-
-    gal_layer_names = [
-        (
-            "sequential_1/dense_1/Cast/ReadVariableOp:0",
-            "sequential_1/dense_1/BiasAdd/ReadVariableOp:0",
-        ),
-        (
-            "sequential_1/dense_1_2/Cast/ReadVariableOp:0",
-            "sequential_1/dense_1_2/BiasAdd/ReadVariableOp:0",
-        ),
-        (
-            "sequential_1/dense_2_1/Cast/ReadVariableOp:0",
-            "sequential_1/dense_2_1/BiasAdd/ReadVariableOp:0",
-        ),
-    ]
-    for i, (w_name, b_name) in enumerate(gal_layer_names):
-        params[f"gal_W{i}"] = weights[w_name].astype(np.float32)
-        params[f"gal_b{i}"] = weights[b_name].astype(np.float32)
-    params["gal_n_layers"] = len(gal_layer_names)
-    for k in weights.keys():
-        print(k)
-
-    params["agn_norm_mean"] = weights[
-        "sequential_2_1/normalization_1_1/Sub/y:0"
-    ].astype(np.float32)
-    params["agn_norm_inv_std"] = weights[
-        "ConstantFolding/sequential_2_1/normalization_1_1/truediv_recip:0"
-    ].astype(np.float32)
-
-    agn_layer_names = [
-        (
-            "sequential_2_1/dense_6_1/Cast/ReadVariableOp:0",
-            "sequential_2_1/dense_6_1/BiasAdd/ReadVariableOp:0",
-        ),
-        (
-            "sequential_2_1/dense_7_1/Cast/ReadVariableOp:0",
-            "sequential_2_1/dense_7_1/BiasAdd/ReadVariableOp:0",
-        ),
-        (
-            "sequential_2_1/dense_8_1/Cast/ReadVariableOp:0",
-            "sequential_2_1/dense_8_1/BiasAdd/ReadVariableOp:0",
-        ),
-    ]
-    for i, (w_name, b_name) in enumerate(agn_layer_names):
-        params[f"agn_W{i}"] = weights[w_name].astype(np.float32)
-        params[f"agn_b{i}"] = weights[b_name].astype(np.float32)
-    params["agn_n_layers"] = len(agn_layer_names)
-
-    n_gal_in = len(params["gal_indices"])
-    n_agn_in = len(params["agn_indices"])
+    # ------------------------------------------------------------------
+    # Load raw checkpoints to extract metadata
+    # ------------------------------------------------------------------
     if verbose:
-        print(
-            f"GAL network: input={n_gal_in} -> {params['gal_W0'].shape} -> {params['gal_W1'].shape} -> {params['gal_W2'].shape}"
+        print("loading", gal_model_path)
+    gal_ckpt = torch.load(gal_model_path, map_location='cpu', weights_only=False)
+    if verbose:
+        print("loading", agn_model_path)
+    agn_ckpt = torch.load(agn_model_path, map_location='cpu', weights_only=False)
+
+    gal_meta = gal_ckpt.get('meta', {})
+    agn_meta = agn_ckpt.get('meta', {})
+
+    # --- Input parameter names -------------------------------------------
+    gal_paramnames: List[str] = gal_meta.get('paramnames', None)
+    agn_paramnames: List[str] = agn_meta.get('paramnames', None)
+
+    if gal_paramnames is None:
+        raise ValueError(
+            f"GAL checkpoint '{gal_model_path}' does not contain "
+            "'paramnames' in its meta dict.  Re-train the emulator so that "
+            "meta['paramnames'] is stored."
         )
-        print(
-            f"AGN network: input={n_agn_in} -> {params['agn_W0'].shape} -> {params['agn_W1'].shape} -> {params['agn_W2'].shape}"
+    if agn_paramnames is None:
+        raise ValueError(
+            f"AGN checkpoint '{agn_model_path}' does not contain "
+            "'paramnames' in its meta dict.  Re-train the emulator so that "
+            "meta['paramnames'] is stored."
         )
+
+    # --- Output column names ---------------------------------------------
+    gal_colnames: List[str] = gal_meta.get('xnames', None)
+    agn_colnames: List[str] = agn_meta.get('xnames', None)
+
+    if gal_colnames is None:
+        raise ValueError(
+            f"GAL checkpoint '{gal_model_path}' does not contain "
+            "'xnames' in its meta dict.  Re-train the emulator so that "
+            "meta['xnames'] is stored (DatasetWriter must be called with "
+            "xnames=GAL_output_colnames)."
+        )
+    if agn_colnames is None:
+        raise ValueError(
+            f"AGN checkpoint '{agn_model_path}' does not contain "
+            "'xnames' in its meta dict.  Re-train the emulator so that "
+            "meta['xnames'] is stored (DatasetWriter must be called with "
+            "xnames=AGN_output_colnames)."
+        )
+
+    if verbose:
+        print(f"  GAL paramnames ({len(gal_paramnames)}): {gal_paramnames}")
+        print(f"  AGN paramnames ({len(agn_paramnames)}): {agn_paramnames}")
+        print(f"  GAL outputs ({len(gal_colnames)}): {gal_colnames}")
+        print(f"  AGN outputs ({len(agn_colnames)}): {agn_colnames}")
+
+    # ------------------------------------------------------------------
+    # Derive TOTAL columns as the intersection of GAL and AGN outputs,
+    # preserving GAL order.  Strip 'GAL_' / 'AGN_' prefixes for matching.
+    # ------------------------------------------------------------------
+    gal_base = [c.replace('GAL_', '') for c in gal_colnames]
+    agn_base = [c.replace('AGN_', '') for c in agn_colnames]
+    agn_base_set = set(agn_base)
+
+    total_colnames: List[str] = [
+        base for base in gal_base if base in agn_base_set
+    ]
+
+    if verbose:
+        print(f"  TOTAL outputs (intersection): {len(total_colnames)}")
+
+    # Index arrays for selecting TOTAL columns out of GAL / AGN outputs
+    gal_output_indices = np.array(
+        [gal_base.index(c) for c in total_colnames], dtype=np.int32)
+    agn_output_indices = np.array(
+        [agn_base.index(c) for c in total_colnames], dtype=np.int32)
+
+    # ------------------------------------------------------------------
+    # Build the merged 'input_cols' list (union of both paramnames,
+    # preserving a stable order: GAL first, then AGN-only extras).
+    # This is used by downstream code that builds feature_dict keys.
+    # ------------------------------------------------------------------
+    seen: set = set()
+    input_cols: List[str] = []
+    for name in list(gal_paramnames) + list(agn_paramnames):
+        if name not in seen:
+            input_cols.append(name)
+            seen.add(name)
+
+    # ------------------------------------------------------------------
+    # Load specsimile emulator weights into JAX-compatible bundles
+    # ------------------------------------------------------------------
+    if verbose:
+        print(f"Loading GAL emulator from {gal_model_path}")
+    gal_bundle = _specsimile.load_decoder_bundle(
+        gal_model_path, prefix='gal', verbose=verbose)
+
+    if verbose:
+        print(f"Loading AGN emulator from {agn_model_path}")
+    agn_bundle = _specsimile.load_decoder_bundle(
+        agn_model_path, prefix='agn', verbose=verbose)
+
+    # ------------------------------------------------------------------
+    # Assemble the combined params dict
+    # ------------------------------------------------------------------
+    params: Dict = {}
+    params.update(gal_bundle)
+    params.update(agn_bundle)
+
+    params['gal_output_indices'] = jnp.array(gal_output_indices)
+    params['agn_output_indices'] = jnp.array(agn_output_indices)
+    params['n_gal_outputs'] = len(gal_colnames)
+    params['n_agn_outputs'] = len(agn_colnames)
+    params['n_total_outputs'] = len(total_colnames)
+    params['input_cols'] = input_cols
+    params['gal_colnames'] = gal_colnames
+    params['agn_colnames'] = agn_colnames
+    params['total_colnames'] = total_colnames
+
+    # ------------------------------------------------------------------
+    # Build the info dict (replaces the old JSON sidecar)
+    # ------------------------------------------------------------------
+    info: Dict = {
+        'input': input_cols,
+        'output': [
+            ['GAL', gal_colnames],
+            ['AGN', agn_colnames],
+            ['TOTAL', total_colnames],
+        ],
+    }
+
+    if verbose:
+        print(f"  GAL outputs: {len(gal_colnames)}")
+        print(f"  AGN outputs: {len(agn_colnames)}")
+        print(f"  TOTAL outputs (intersection): {len(total_colnames)}")
 
     return params, info
 
 
-def jax_normalize_grahsp(x, mean, inv_std):
-    """Normalise x.
+# ---------------------------------------------------------------------------
+# JAX forward pass
+# ---------------------------------------------------------------------------
+
+def jax_fastgrahsp_predict(
+    feature_dict: dict,
+    params: Dict,
+) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """
+    Pure-JAX forward pass for the specsimile-based fastGRAHSP emulator.
 
     Parameters
     ----------
-    x: float
-        value
-    mean: float
-        mean
-    inv_std: float
-        inverse standard deviation
+    feature_dict : dict[str, jnp.ndarray]
+        Mapping from feature name to ``(N,)`` JAX array.  Must contain at
+        least all keys present in ``gal_paramnames`` and ``agn_paramnames``
+        (as stored in the model checkpoints), plus ``'log_stellar_mass'``
+        and ``'log_L_AGN'`` for the normalisation.
+    params : dict
+        Bundle returned by :func:`extract_fused_galagn_weights`.
 
     Returns
     -------
-    float:
-        mean-subtracted value, normalised by inv_std
+    total   : (N, n_total_outputs)  combined GAL + AGN flux  [mJy]
+    gal_out : (N, n_gal_outputs)    GAL-only flux            [mJy]
+    agn_out : (N, n_agn_outputs)    AGN-only flux            [mJy]
     """
-    return (x - mean) * inv_std
+    col_dict = feature_dict
 
+    # Normalisation scalars
+    log_stellar_mass = col_dict['log_stellar_mass']   # (N,)
+    log_L_AGN = col_dict['log_L_AGN']          # (N,)
 
-def _jax_grahsp_forward(h, params, prefix, n_layers):
-    """Forward pass for GAL or AGN sub-network of fastGRAHSP.
+    # GAL forward pass — jax_encoder_forward_kw selects only the columns
+    # that the GAL network was trained on (from gal_paramnames in the bundle)
+    h_gal = _specsimile.jax_encoder_forward_kw(
+        params, 'gal', col_dict,
+    )   # (N, n_gal_outputs)  log10(flux / gal_norm)
 
-    Parameters
-    ----------
-    h: float
-        input layer values
-    params: dict
-        model data
-    prefix: str
-        'agn' or 'gal', which sub-network to evaluate.
-    n_layers: int
-        number of model layers
+    # AGN forward pass
+    h_agn = _specsimile.jax_encoder_forward_kw(
+        params, 'agn', col_dict,
+    )   # (N, n_agn_outputs)  log10(flux / agn_norm)
 
-    Returns
-    -------
-    h: float
-        output layer values
-    """
-    h = jax_normalize_grahsp(
-        h, params[f"{prefix}_norm_mean"], params[f"{prefix}_norm_inv_std"]
-    )
-    for i in range(n_layers):
-        h = h @ params[f"{prefix}_W{i}"] + params[f"{prefix}_b{i}"]
-        if i < n_layers - 1:
-            h = jax.nn.tanh(h)
-    return h
+    gal_norm = 10.0 ** (log_stellar_mass - _GAL_NORM_OFFSET)   # (N,)
+    agn_norm = 10.0 ** (log_L_AGN - _AGN_NORM_OFFSET)   # (N,)
 
+    # De-log and apply normalisation
+    gal_out = (10.0 ** h_gal) * gal_norm[:, None]   # (N, n_gal_outputs)
+    agn_out = (10.0 ** h_agn) * agn_norm[:, None]   # (N, n_agn_outputs)
 
-def jax_fastgrahsp_predict(X, params):
-    """Predict total, GAL, AGN fluxes from fastGRAHSP inputs.
-
-    X: (N, n_input_features)
-    Returns: total (N, n_total), gal (N, n_gal_out), agn (N, n_agn_out)
-
-    Parameters
-    ----------
-    X: float
-        input data
-    params: dict
-        model data
-
-    Returns
-    -------
-    flux: array
-        flux in mJy.
-    fluxGAL: array
-        flux in mJy for galaxy alone
-    fluxAGN: array
-        flux in mJy for AGN alone
-    """
-    X = X.astype(jnp.float32)
-    Xgal = X[:, params["gal_indices"]]
-    Xagn = X[:, params["agn_indices"]]
-
-    gal_norm_raw = X[:, params["gal_norm_index"]].reshape(-1)
-    agn_norm_raw = X[:, params["agn_norm_index"]].reshape(-1)
-    gal_norm = 10.0 ** (gal_norm_raw - params["gal_norm_offset"])
-    agn_norm = 10.0 ** (agn_norm_raw - params["agn_norm_offset"])
-
-    h_gal = _jax_grahsp_forward(Xgal, params, "gal", params["gal_n_layers"]).astype(
-        jnp.float64
-    )
-    gal_out_linear = (10.0**h_gal) * gal_norm[:, None].astype(jnp.float64)
-
-    h_agn = _jax_grahsp_forward(Xagn, params, "agn", params["agn_n_layers"]).astype(
-        jnp.float64
-    )
-    agn_out_linear = (10.0**h_agn) * agn_norm[:, None].astype(jnp.float64)
-
-    gal_selected = gal_out_linear[:, params["gal_output_indices"]]
-    agn_selected = agn_out_linear[:, params["agn_output_indices"]]
+    # Select shared (TOTAL) columns and sum
+    gal_selected = gal_out[:, params['gal_output_indices']]   # (N, n_total)
+    agn_selected = agn_out[:, params['agn_output_indices']]   # (N, n_total)
     total = gal_selected + agn_selected
 
-    return total, gal_out_linear, agn_out_linear
-
-
-class JaxFastGRAHSP:
-    """Reusable emulator class."""
-
-    def __init__(self, width=128):
-        """Initialise.
-
-        Parameters
-        ----------
-        width: int
-            Neural network model to use, must be one of 128, 256, 512.
-            Larger size is slower but more accurate
-        """
-        key = f"GALAGN{width}"
-        filename = os.path.join(os.path.dirname(__file__), key)
-        self.params = extract_fused_galagn_weights(
-            onnx_path=filename + ".onnx", json_path=filename + ".json"
-        )
-
-    def __call__(self, X):
-        """Predict flux.
-
-        Parameters
-        ----------
-        X: array
-            Model parameter array (see example below):
-
-                * log10 tau: time-scale of starformation in Myr
-                * log10 age: age of oldest stars in Myr
-                * log10 AFeII: amplitude of lines
-                * log10 Alines: amplitude of lines
-                * linewidth: width of broad emission lines
-                * Si: strength of 12µm silicate feature (positive: emission, negative: absorption)
-                * fcov: covering factor, based on the ratio of 12µm to 5100A luminosity ratio
-                * COOLlam: central wavelength in µm of cold torus component
-                * COOLwidth: width (in dex) of cold torus component
-                * log10 HOTfcov: peak luminosity ratio of hot to cold torus component
-                * HOTlam: central wavelength in µm of hot torus component
-                * HOTwidth: width (in dex) of hot torus component
-                * plslope: AGN power law slope
-                * plbendloc: wavelength of UV bend.
-                * log10 plbendwidth: width of UV bend (in dex).
-                * log10 EBV: E(B-V) attenuation coefficient of entire system.
-                * log10 EBV_AGN: E(B-V) attenuation coefficient of nucleus.
-                * alpha: dust slope of Dale+ model
-                * z: redshift
-                * M: log10 of galaxy stellar mass in solar masses
-                * L5100A: log10 of AGN luminosity at 5100A in erg/s.
-
-        Returns
-        -------
-        flux: array
-            flux in mJy.
-        fluxGAL: array
-            flux in mJy for galaxy alone
-        fluxAGN: array
-            flux in mJy for AGN alone
-        """
-        return jax_fastgrahsp_predict(X, self.params)
+    return total, gal_out, agn_out
