@@ -276,6 +276,15 @@ class TestQuiescentGalaxy:
         assert np.all(np.isfinite(gal_out)), "Non-finite GAL fluxes"
         assert np.all(gal_out > 0), f"Non-positive GAL fluxes: min={gal_out.min():.3e}"
 
+    def test_wise1_flux(self, emulator_weights, total_colnames):
+        """Print the WISE1 flux for the quiescent galaxy."""
+        total, gal_out, agn_out = _run_predict(emulator_weights, _PARAMS_QUI)
+        t_idx = _get_col_index(list(total_colnames), "WISE1")
+        if t_idx is None:
+            pytest.skip("WISE1 not found in total colnames")
+        wise1_flux = float(total[0, t_idx])
+        print(f"Quiescent galaxy WISE1 flux: {wise1_flux:.3e} mJy")
+
     def test_sfr_physically_reasonable(self, emulator_weights, gal_colnames):
         """
         SFR for a quiescent galaxy with short tau (158 Myr) and old age (8 Gyr)
@@ -564,6 +573,15 @@ class TestQuasar:
         total, gal_out, agn_out = _run_predict(emulator_weights, _PARAMS_QUASAR)
         assert np.all(np.isfinite(total)), "Non-finite total fluxes (quasar)"
         assert np.all(total > 0), f"Non-positive total fluxes (quasar): min={total.min():.3e}"
+
+    def test_wise1_flux(self, emulator_weights, total_colnames):
+        """Print the WISE1 flux for the quasar."""
+        total, gal_out, agn_out = _run_predict(emulator_weights, _PARAMS_QUASAR)
+        t_idx = _get_col_index(list(total_colnames), "WISE1")
+        if t_idx is None:
+            pytest.skip("WISE1 not found in total colnames")
+        wise1_flux = float(total[0, t_idx])
+        print(f"Quasar WISE1 flux: {wise1_flux:.3e} mJy")
 
     def test_agn_dominates_in_uv(self, emulator_weights, total_colnames, agn_colnames):
         """
