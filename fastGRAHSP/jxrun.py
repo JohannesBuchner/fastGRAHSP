@@ -27,6 +27,7 @@ by ``difflike.py`` / ``megadifflike.py``:
 * :func:`jax_fastgrahsp_predict` – pure-JAX forward pass.
 """
 
+import os
 from typing import Dict, List, Tuple
 
 import jax.numpy as jnp
@@ -91,6 +92,10 @@ def extract_fused_galagn_weights(
     # ------------------------------------------------------------------
     # Load raw checkpoints to extract metadata
     # ------------------------------------------------------------------
+    if gal_model_path is None:
+        gal_model_path = os.path.dirname(__file__) + '/GAL.pt'
+    if agn_model_path is None:
+        agn_model_path = os.path.dirname(__file__) + '/AGN.pt'
     if verbose:
         print("loading", gal_model_path)
     gal_ckpt = torch.load(gal_model_path, map_location='cpu', weights_only=False)
@@ -137,7 +142,7 @@ def extract_fused_galagn_weights(
             "xnames=AGN_output_colnames)."
         )
 
-    if verbose:
+    if verbose or True:
         print(f"  GAL paramnames ({len(gal_paramnames)}): {gal_paramnames}")
         print(f"  AGN paramnames ({len(agn_paramnames)}): {agn_paramnames}")
         print(f"  GAL outputs ({len(gal_colnames)}): {gal_colnames}")
