@@ -22,7 +22,7 @@ jax.config.update("jax_enable_x64", 1)
 _PARAMS_QUASAR = {
     "log_sfhdelayed_tau_main":      3.7350649,    # log10(Myr)
     "log_sfhdelayed_age_main":      4.0,           # log10(Myr), 10 Gyr
-    "log_sfhdelayed_f_burst":       -5.0,          # log10
+    "log_sfhdelayed_f_burst":       -10.0,         # log10
     "log_activatelines_AFeII":      -0.02334764,   # log10
     "log_activatelines_Alines":     0.27632016,    # log10
     "activatelines.linewidth":      5000.0,        # km/s
@@ -50,7 +50,7 @@ _PARAMS_QUASAR = {
 _PARAMS_QUI = {
     "log_sfhdelayed_tau_main":      2.2,           # log10(Myr), short e-folding
     "log_sfhdelayed_age_main":      3.9,           # log10(Myr), ~8 Gyr
-    "log_sfhdelayed_f_burst":       -5.0,
+    "log_sfhdelayed_f_burst":       -10.0,
     "log_activatelines_AFeII":      -0.02334764,
     "log_activatelines_Alines":     0.27632016,
     "activatelines.linewidth":      5000.0,
@@ -78,7 +78,7 @@ _PARAMS_QUI = {
 _PARAMS_SF = {
     "log_sfhdelayed_tau_main":      4.0,           # log10(Myr), long e-folding
     "log_sfhdelayed_age_main":      4.0,           # log10(Myr), 10 Gyr
-    "log_sfhdelayed_f_burst":       -5.0,
+    "log_sfhdelayed_f_burst":       -10.0,
     "log_activatelines_AFeII":      -0.02334764,
     "log_activatelines_Alines":     0.27632016,
     "activatelines.linewidth":      5000.0,

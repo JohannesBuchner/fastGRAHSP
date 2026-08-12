@@ -50,6 +50,7 @@ def extract_fused_galagn_weights(
     gal_model_path: str,
     agn_model_path: str,
     verbose: bool = True,
+    verbose_weight_load: bool = False,
 ) -> Tuple[Dict, Dict]:
     """
     Load the GAL and AGN specsimile emulators.
@@ -65,6 +66,9 @@ def extract_fused_galagn_weights(
     agn_model_path : str
         Path to the AGN specsimile ``.pt`` checkpoint.
     verbose : bool
+        If true, print some model details
+    verbose_weight_load: bool
+        If true, print a lot of model weight details
 
     Returns
     -------
@@ -187,12 +191,12 @@ def extract_fused_galagn_weights(
     if verbose:
         print(f"Loading GAL emulator from {gal_model_path}")
     gal_bundle = _specsimile.load_decoder_bundle(
-        gal_model_path, prefix='gal', verbose=verbose)
+        gal_model_path, prefix='gal', verbose=verbose_weight_load)
 
     if verbose:
         print(f"Loading AGN emulator from {agn_model_path}")
     agn_bundle = _specsimile.load_decoder_bundle(
-        agn_model_path, prefix='agn', verbose=verbose)
+        agn_model_path, prefix='agn', verbose=verbose_weight_load)
 
     # ------------------------------------------------------------------
     # Assemble the combined params dict
@@ -203,6 +207,15 @@ def extract_fused_galagn_weights(
 
     params['gal_output_indices'] = jnp.array(gal_output_indices)
     params['agn_output_indices'] = jnp.array(agn_output_indices)
+    gal_output_slice_range = jnp.arange(min(gal_output_indices), max(gal_output_indices) + 1)
+    agn_output_slice_range = jnp.arange(min(agn_output_indices), max(agn_output_indices) + 1)
+    if jnp.array_equal(gal_output_slice_range, params['gal_output_indices']):
+        params['gal_output_slice'] = slice(int(min(gal_output_indices)), int(max(gal_output_indices)) + 1)
+    if jnp.array_equal(agn_output_slice_range, params['agn_output_indices']):
+        params['agn_output_slice'] = slice(int(min(agn_output_indices)), int(max(agn_output_indices)) + 1)
+    if verbose:
+        print('gal_output_indices:', gal_output_indices, 'slice:', params.get('gal_output_slice'))
+        print('agn_output_indices:', agn_output_indices, 'slice:', params.get('agn_output_slice'))
     params['n_gal_outputs'] = len(gal_colnames)
     params['n_agn_outputs'] = len(agn_colnames)
     params['n_total_outputs'] = len(total_colnames)
@@ -275,16 +288,22 @@ def jax_fastgrahsp_predict(
         params, 'agn', col_dict,
     )   # (N, n_agn_outputs)  log10(flux / agn_norm)
 
-    gal_norm = 10.0 ** (log_stellar_mass - _GAL_NORM_OFFSET)   # (N,)
-    agn_norm = 10.0 ** (log_L_AGN - _AGN_NORM_OFFSET)   # (N,)
+    gal_log_norm = log_stellar_mass - _GAL_NORM_OFFSET  # (N,)
+    agn_log_norm = log_L_AGN - _AGN_NORM_OFFSET   # (N,)
 
     # De-log and apply normalisation
-    gal_out = (10.0 ** h_gal) * gal_norm[:, None]   # (N, n_gal_outputs)
-    agn_out = (10.0 ** h_agn) * agn_norm[:, None]   # (N, n_agn_outputs)
+    gal_out = 10.0 ** (h_gal + gal_log_norm[:, None])  # (N, n_gal_outputs)
+    agn_out = 10.0 ** (h_agn + agn_log_norm[:, None])  # (N, n_agn_outputs)
 
     # Select shared (TOTAL) columns and sum
-    gal_selected = gal_out[:, params['gal_output_indices']]   # (N, n_total)
-    agn_selected = agn_out[:, params['agn_output_indices']]   # (N, n_total)
+    if 'gal_output_slice' in params:
+        gal_selected = 10.0 ** (h_gal[:, params['gal_output_slice']] + gal_log_norm[:, None])   # (N, n_total)
+    else:
+        gal_selected = gal_out[:, params['gal_output_indices']]  # (N, n_total)
+    if 'agn_output_slice' in params:
+        agn_selected = 10.0 ** (h_agn[:, params['agn_output_slice']] + agn_log_norm[:, None])   # (N, n_total)
+    else:
+        agn_selected = agn_out[:, params['agn_output_indices']]  # (N, n_total)
     total = gal_selected + agn_selected
 
     return total, gal_out, agn_out
