@@ -146,7 +146,7 @@ def extract_fused_galagn_weights(
             "xnames=AGN_output_colnames)."
         )
 
-    if verbose or True:
+    if verbose:
         print(f"  GAL paramnames ({len(gal_paramnames)}): {gal_paramnames}")
         print(f"  AGN paramnames ({len(agn_paramnames)}): {agn_paramnames}")
         print(f"  GAL outputs ({len(gal_colnames)}): {gal_colnames}")
